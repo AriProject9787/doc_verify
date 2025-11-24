@@ -20,7 +20,7 @@ LOG_FILE = "verification_log.csv"
 
 def main():
     st.title("🔍 Document Verification System")
-    st.markdown("Upload a document (Image or PDF) to verify its authenticity.")
+    st.markdown("Upload a document (Image or PDF) to verify its authenticity.(only 10 marksheet support now)")
 
     # Sidebar for configuration or info
     with st.sidebar:
@@ -41,7 +41,60 @@ def main():
         else:
             st.text("No logs available yet.")
 
-    # File Uploader
+    # --- Main Content ---
+    
+    # 1. Document Configuration
+    with st.expander("Supported Doc Type", expanded=False):
+        st.markdown("""
+        **Categories:**
+        - ✅ **Supported**: 10th Marksheet (2020 onwards)
+        - ⚠️ **Non-Support**: 10th Marksheet (Before 2020)
+        - 🚧 **Future Update**: 11th & 12th Marksheets
+        """)
+        
+        col_config1, col_config2 = st.columns(2)
+        
+        with col_config1:
+            doc_type = st.selectbox(
+                "Select Document Type",
+                ["10th Marksheet", "11th Marksheet", "12th Marksheet"]
+            )
+            
+        with col_config2:
+            # Default to current year
+            current_year = datetime.datetime.now().year
+            selected_year = st.number_input("Select Year of Passing", min_value=2000, max_value=current_year + 1, value=current_year)
+
+    # Determine Support Status
+    is_supported = False
+    status_message = ""
+    status_color = "gray"
+    
+    if doc_type == "10th Marksheet":
+        if selected_year >= 2020:
+            is_supported = True
+            status_message = "✅ Supported Document"
+            status_color = "green"
+        else:
+            is_supported = False
+            status_message = "⚠️ Non-Support Document (Year < 2020)"
+            status_color = "orange"
+    else:
+        is_supported = False
+        status_message = "🚧 Future Update (Coming Soon)"
+        status_color = "blue"
+
+    # Display Status
+    st.markdown(f"**Status:** :{status_color}[{status_message}]")
+    
+    if "Future Update" in status_message:
+        st.info(f"Support for {doc_type} is coming in a future update.")
+        return # Stop execution for future updates
+
+    st.divider()
+
+    # 2. File Uploader
+    st.subheader("2. Upload Document")
     uploaded_file = st.file_uploader("Choose a file", type=['png', 'jpg', 'jpeg', 'pdf'])
 
     if uploaded_file is not None:
@@ -76,7 +129,21 @@ def main():
                 st.image(img, caption=f"Page {page_num}", use_container_width=True)
 
             with col2:
-                if st.button(f"Verify Page {page_num}", key=f"verify_{page_num}"):
+                # Verify Button Logic
+                verify_btn_disabled = False
+                verify_btn_help = ""
+                
+                if not is_supported:
+                    # User said "only verify now" for supported, but also "10 less then 2020 marksheet is non support field"
+                    # and "in gui show only 10 marksheet above 2020 only verify now"
+                    # This implies we should DISABLE verify for non-supported docs?
+                    # "show only 10 marksheet above 2020 only verify now" -> This phrasing suggests only these should have the "Verify Now" option enabled?
+                    # Or maybe it means "Only verify now" is the text? 
+                    # I will assume we DISABLE verification for non-supported documents to be safe and strictly follow "only verify now" for > 2020.
+                    verify_btn_disabled = True
+                    verify_btn_help = "Verification is not supported for this document type/year."
+
+                if st.button(f"Verify Page {page_num}", key=f"verify_{page_num}", disabled=verify_btn_disabled, help=verify_btn_help):
                     
                     # Container for process logs (hidden by default unless expanded, but we want to hide it completely or put in expander)
                     # User said "hide a all process in drop down"

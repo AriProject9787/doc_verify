@@ -219,6 +219,19 @@ def scrape_web_data(url):
                              data[key_out] = val
                              break
     
+    # Try to extract Year/Session if not found
+    if 'Year' not in data:
+        year_keywords = ['Year of Passing', 'Session', 'Examination Year', 'Year']
+        for line in lines:
+            for yk in year_keywords:
+                if yk.upper() in line.upper():
+                    # Look for 4 digit year
+                    years = re.findall(r'\b20\d{2}\b', line)
+                    if years:
+                        data['Year'] = years[0]
+                        break
+            if 'Year' in data: break
+    
     # Fallback for Total Marks
     if 'Total Marks' not in data:
         numbers = []
