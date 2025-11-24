@@ -7,6 +7,5 @@ beautifulsoup4
 pytesseract
 pandas
 rapidfuzz
-tesseract
 
 streamlit
