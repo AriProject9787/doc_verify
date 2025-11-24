@@ -1,0 +1,11 @@
+opencv-python
+numpy
+pyzbar
+pdf2image
+requests
+beautifulsoup4
+pytesseract
+pandas
+rapidfuzz
+
+streamlit
