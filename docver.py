@@ -102,7 +102,7 @@ def scrape_web_data(url):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers, timeout=10, verify=False)
         response.raise_for_status()
     except requests.RequestException as e:
         print(f"[!] Error fetching URL: {e}")
@@ -131,13 +131,17 @@ def scrape_web_data(url):
         'Father Name': 'Father Name', 
         'Mother & Father Name': 'Father Name',
         'NAME OF THE SCHOOL': 'School Name',
+        'பள்ளியின் பெயர்': 'School Name',  # Tamil for School Name
         'PERMANENT REGISTER NO': 'Perm Reg No',
+        'நிரந்தர பதிவெண்': 'Perm Reg No',  # Tamil for Perm Reg No
         'Name': 'Name',
         'ROLL NO': 'Roll No',
         'Roll Number': 'Roll No',
+        'தேர்வெண்': 'Roll No',  # Tamil for Roll No
         'DATE OF BIRTH': 'DOB',
         'Date of Birth': 'DOB',
-        'TOTAL': 'Total Marks',
+        'பிறந்ததேதி': 'DOB',  # Tamil for DOB
+        'TOTAL MARKS': 'Total Marks',
         'Total Marks': 'Total Marks',
         'Grand Total': 'Total Marks',
         'Result': 'Result'
@@ -164,12 +168,31 @@ def scrape_web_data(url):
                                 continue
                         val = parts[1].strip()
                         if val:
-                            data[key_out] = val
-                            continue
+                            # For DOB, extract just the date part
+                            if key_out == 'DOB':
+                                date_match = re.search(r'\d{2}[/-]\d{2}[/-]\d{4}', val)
+                                if date_match:
+                                    data[key_out] = date_match.group(0)
+                                    continue
+                            else:
+                                data[key_out] = val
+                                continue
+                
+                # Strategy 1b: Value on same line without colon (e.g., "DATE OF BIRTH 30/10/2004")
+                if key_out == 'DOB' and 'DOB' not in data:
+                    date_match = re.search(r'\d{2}[/-]\d{2}[/-]\d{4}', line)
+                    if date_match:
+                        data[key_out] = date_match.group(0)
+                        continue
 
                 # Strategy 2: Look ahead for value
-                # Increased lookahead to 10 lines for Name, but others might be closer
-                lookahead_range = 10 if key_out == 'Name' else 6
+                # Increased lookahead for fields that appear further from their labels
+                if key_out == 'Name':
+                    lookahead_range = 10
+                elif key_out in ['DOB', 'School Name']:
+                    lookahead_range = 12  # These can be far from their labels in 12th marksheets
+                else:
+                    lookahead_range = 6
                 
                 for offset in range(1, lookahead_range):
                     if i + offset < len(lines):
@@ -191,32 +214,92 @@ def scrape_web_data(url):
                                 data[key_out] = val
                                 break
                         elif key_out == 'School Name':
-                             if re.search(r'[a-zA-Z]', val) and len(val) > 5:
+                            # Skip Tamil text and label lines (containing '/')
+                            # Look for lines with predominantly English alphabetic characters
+                            if '/' in val or len(val) < 5:
+                                continue
+                            # Count English letters
+                            english_letters = sum(1 for c in val if c.isascii() and c.isalpha())
+                            if english_letters > 10 and re.search(r'[A-Z]', val):
                                 data[key_out] = val
                                 break
                         elif key_out == 'Roll No':
+                            # 12th: Roll No might be in format "5094556 / MAY / 2022"
+                            if '/' in val:
+                                parts = val.split('/')
+                                for p in parts:
+                                    p = p.strip()
+                                    if p.isdigit() and len(p) > 5:
+                                        data[key_out] = p
+                                        break
+                                if key_out in data: break
+                            
                             if re.search(r'\d', val):
                                 data[key_out] = val
                                 break
                         elif key_out == 'DOB':
-                            if re.search(r'\d{2}[/-]\d{2}[/-]\d{4}', val):
-                                data[key_out] = val
+                            # Look for date patterns: DD/MM/YYYY or DD-MM-YYYY
+                            date_match = re.search(r'\d{2}[/-]\d{2}[/-]\d{4}', val)
+                            if date_match:
+                                data[key_out] = date_match.group(0)
                                 break
                         elif key_out == 'Total Marks':
-                            if re.search(r'^\d{2,3}$', val):
-                                data[key_out] = val
-                                break
+                            # 12th marksheet has 3-4 digit totals (e.g., 0375)
+                            # Strategy: For grand total, look for pattern "0375 ZERO THREE SEVEN FIVE"
+                            # This distinguishes it from individual subject marks
+                            # First check if this line has spelled-out numbers
+                            number_words = ['ZERO', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE']
+                            if any(word in val.upper() for word in number_words):
+                                # This line contains the spelled out number, extract the digits
+                                match = re.search(r'\b0*(\d{3,4})\b', val)
+                                if match:
+                                    # Extract the number and remove leading zeros
+                                    total = match.group(1).lstrip('0') or '0'
+                                    data[key_out] = total
+                                    break  # Found grand total with spelled words, stop looking
+                            # Only accept plain numbers if we haven't found a spelled-out version yet
+                            # and we're not already processing a higher value
+                            if key_out not in data or 'ZERO' not in str(data.get(key_out, '')):
+                                match = re.search(r'\b\d{3,4}\b', val)
+                                if match:
+                                    candidate = match.group(0).lstrip('0') or '0'
+                                    # Keep the larger value (grand total is bigger than subject marks)
+                                    if key_out in data:
+                                        try:
+                                            if int(candidate) > int(data[key_out]):
+                                                data[key_out] = candidate
+                                        except ValueError:
+                                            pass
+                                    else:
+                                        # Only set if it's a reasonable total (> 100 for 12th)
+                                        if int(candidate) > 100:
+                                            data[key_out] = candidate
             
-            # Special handling for Perm Reg No if it appears BEFORE the label
+            # Special handling for fields that appear BEFORE their labels
+            
+            # Perm Reg No lookbehind
             if key_out == 'Perm Reg No' and key_out not in data:
                  # Look backwards 5 lines
                  for offset in range(1, 6):
                     if i - offset >= 0:
                         val = lines[i-offset].strip()
                         if not val: continue
-                        # Pattern: Starts with X or M, alphanumeric, length > 8, MUST contain digits
+                        # Pattern: alphanumeric, length > 8, MUST contain digits (10th and 12th)
                         if re.search(r'^[A-Z0-9]{8,}$', val) and re.search(r'\d', val) and not re.search(r'^\d{2}/\d{2}/\d{4}', val):
                              data[key_out] = val
+                             break
+            
+            # DOB lookbehind (for 12th marksheets where DOB appears before its label)
+            if key_out == 'DOB' and key_out not in data:
+                 # Look backwards 10 lines
+                 for offset in range(1, 11):
+                    if i - offset >= 0:
+                        val = lines[i-offset].strip()
+                        if not val: continue
+                        # Pattern: DD/MM/YYYY or DD-MM-YYYY
+                        date_match = re.search(r'^\d{2}[/-]\d{2}[/-]\d{4}$', val)
+                        if date_match:
+                             data[key_out] = date_match.group(0)
                              break
     
     # Try to extract Year/Session if not found
@@ -236,9 +319,9 @@ def scrape_web_data(url):
     if 'Total Marks' not in data:
         numbers = []
         for line in lines:
-            nums = re.findall(r'\b\d{3}\b', line)
+            nums = re.findall(r'\b\d{3,4}\b', line)
             for n in nums:
-                if 100 < int(n) <= 500:
+                if 100 < int(n) <= 600:  # 12th is out of 600 usually
                     numbers.append(int(n))
         if numbers:
             data['Total Marks'] = str(max(numbers))

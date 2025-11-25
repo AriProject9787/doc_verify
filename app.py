@@ -20,12 +20,12 @@ LOG_FILE = "verification_log.csv"
 
 def main():
     st.title("🔍 Document Verification System")
-    st.markdown("Upload a document (Image or PDF) to verify its authenticity.(only 10 marksheet support now)")
+    st.markdown("Upload a document (Image or PDF) to verify its authenticity. (10th, 11th, and 12th marksheets from 2020 onwards supported)")
 
     # Sidebar for configuration or info
     with st.sidebar:
         st.header("About")
-        st.info("This system scans for a QR code, scrapes the linked data, performs OCR, and verifies the document content.")
+        st.info("This system scans for a QR code, scrapes the linked data, performs OCR, and verifies the document content. Currently supports 10th, 11th, and 12th marksheets (2020 onwards).")
         st.markdown("---")
         st.markdown("**Supported Formats:** JPG, PNG, PDF")
         
@@ -47,9 +47,15 @@ def main():
     with st.expander("Supported Doc Type", expanded=False):
         st.markdown("""
         **Categories:**
-        - ✅ **Supported**: 10th Marksheet (2020 onwards)
-        - ⚠️ **Non-Support**: 10th Marksheet (Before 2020)
-        - 🚧 **Future Update**: 11th & 12th Marksheets
+        - ✅ **Supported**: 10th, 11th, 12th Marksheets (Year 2020 and above)
+        - ⚠️ **Non-Support**: 10th, 11th, 12th Marksheets (Before 2020)
+        - 🚧 **Future Updates**: 
+          - Degree Certificate
+          - Aadhaar Card
+          - Smart Card
+          - PAN Card
+          - Passport
+          - And more...
         """)
         
         col_config1, col_config2 = st.columns(2)
@@ -70,7 +76,7 @@ def main():
     status_message = ""
     status_color = "gray"
     
-    if doc_type == "10th Marksheet":
+    if doc_type in ["10th Marksheet", "11th Marksheet", "12th Marksheet"]:
         if selected_year >= 2020:
             is_supported = True
             status_message = "✅ Supported Document"
